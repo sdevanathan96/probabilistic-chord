@@ -9,7 +9,7 @@
 int main() {
     std::cout << "Running SimTransport tests..." << std::endl;
 
-    // ── Test 1: Basic PING/PONG between two nodes ───────────
+
     std::cout << "[1] Basic PING/PONG..." << std::endl;
     {
         NodeInfo node_a(1, "sim", 1);
@@ -21,16 +21,15 @@ int main() {
         std::atomic<bool> b_got_ping(false);
         std::atomic<bool> a_got_pong(false);
 
-        // Node B: when it gets a PING, reply with PONG
         transport_b.register_handler(MessageType::PING,
             [&](const NodeInfo& from, const Message& msg) {
                 b_got_ping.store(true);
-                // Send PONG back
+
                 Message pong(MessageType::PONG, {});
                 transport_b.send(from, pong);
             });
 
-        // Node A: record when it gets a PONG
+
         transport_a.register_handler(MessageType::PONG,
             [&](const NodeInfo& from, const Message& msg) {
                 a_got_pong.store(true);
@@ -39,14 +38,12 @@ int main() {
         transport_a.start();
         transport_b.start();
 
-        // A sends PING to B
+
         Message ping(MessageType::PING, {});
         bool sent = transport_a.send(node_b, ping);
         assert(sent);
 
-        // Give it a moment (messages might be delivered on
-        // the sender's thread synchronously, or you might
-        // add async delivery later)
+
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
         assert(b_got_ping.load());
@@ -58,15 +55,12 @@ int main() {
         std::cout << "  PASS" << std::endl;
     }
 
-    // ── Test 2: Five nodes, all-to-all PING ─────────────────
+
     std::cout << "[2] Five-node PING mesh..." << std::endl;
     {
         const int N = 5;
         std::vector<NodeInfo> infos;
-        // Use unique_ptr manually for C++11
         std::vector<SimTransport*> transports;
-
-        // Track how many PINGs each node received
         std::vector<std::atomic<int>*> ping_counts;
 
         for (int i = 0; i < N; ++i) {
@@ -75,7 +69,6 @@ int main() {
             ping_counts.push_back(new std::atomic<int>(0));
         }
 
-        // Each node: count incoming PINGs
         for (int i = 0; i < N; ++i) {
             std::atomic<int>* counter = ping_counts[i];
             transports[i]->register_handler(MessageType::PING,
@@ -85,7 +78,6 @@ int main() {
             transports[i]->start();
         }
 
-        // Each node sends a PING to every other node
         Message ping(MessageType::PING, {});
         for (int i = 0; i < N; ++i) {
             for (int j = 0; j < N; ++j) {
@@ -97,13 +89,11 @@ int main() {
 
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-        // Each node should have received exactly N-1 PINGs
         for (int i = 0; i < N; ++i) {
             int count = ping_counts[i]->load();
             assert(count == N - 1);
         }
 
-        // Cleanup
         for (int i = 0; i < N; ++i) {
             transports[i]->stop();
             delete transports[i];
@@ -113,7 +103,6 @@ int main() {
         std::cout << "  PASS" << std::endl;
     }
 
-    // ── Test 3: Send to unregistered node fails ─────────────
     std::cout << "[3] Send to unknown node..." << std::endl;
     {
         NodeInfo node_a(200, "sim", 200);
@@ -130,7 +119,6 @@ int main() {
         std::cout << "  PASS" << std::endl;
     }
 
-    // ── Test 4: Payload survives delivery ────────────────────
     std::cout << "[4] Payload integrity..." << std::endl;
     {
         NodeInfo node_a(300, "sim", 300);
@@ -145,7 +133,6 @@ int main() {
 
         transport_b.register_handler(MessageType::PING,
             [&](const NodeInfo& from, const Message& msg) {
-                // Verify the payload arrived intact
                 if (msg.payload == expected_payload) {
                     payload_ok.store(true);
                 }

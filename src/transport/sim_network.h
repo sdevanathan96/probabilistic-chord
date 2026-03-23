@@ -8,14 +8,7 @@
 
 class SimTransport;  // forward declaration
 
-// ── SimNetwork ───────────────────────────────────────────────
-// A singleton that acts as the "network" for simulated transports.
-// It keeps a registry of all SimTransport instances and routes
-// messages between them by looking up the destination's NodeId.
-//
-// Thread safety: multiple SimTransport instances may call
-// route() concurrently, so the registry must be protected
-// with a mutex.
+
 
 class SimNetwork {
 public:

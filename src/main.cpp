@@ -6,7 +6,7 @@
 #include "transport/types.h"
 
 int main() {
-    // Create two nodes with unique IDs and local addresses
+
     NodeInfo n1(1, "sim", 1);
     NodeInfo n2(2, "sim", 2);
     NodeInfo n3(3, "sim", 3);

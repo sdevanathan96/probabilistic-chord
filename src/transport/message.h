@@ -6,8 +6,6 @@
 #include <vector>
 #include "types.h"
 
-// ── Message Types ────────────────────────────────────────────
-// Add more as needed in later days (JOIN, STABILIZE, etc.)
 
 enum class MessageType : uint8_t {
     PING            = 0x01,
@@ -24,13 +22,8 @@ enum class MessageType : uint8_t {
     FILTER_UPDATE   = 0x50,
 };
 
-// ── Message ──────────────────────────────────────────────────
+
 // Wire format: [4-byte payload length][1-byte type][payload]
-//
-// The payload is a raw byte buffer. Each message type defines
-// its own payload layout. For now, PING/PONG carry the sender's
-// NodeInfo. You'll extend the payload format per message type
-// as you build out the protocol.
 
 struct Message {
     MessageType type;
@@ -41,16 +34,10 @@ struct Message {
         : type(type), payload(payload) {}
 };
 
-// ── Serialization ────────────────────────────────────────────
-// These convert a Message to/from a byte buffer suitable for
-// sending over the wire or passing through SimTransport.
-//
 // Wire format:
 //   bytes [0..3]: payload length as uint32_t (network byte order)
 //   byte  [4]:    message type
 //   bytes [5..]:  payload
-//
-// Implement these in message.cpp.
 
 // Serialize a Message into a byte buffer (wire format).
 std::vector<uint8_t> serialize(const Message& msg);
@@ -59,13 +46,6 @@ std::vector<uint8_t> serialize(const Message& msg);
 // Returns true on success, false if the buffer is malformed.
 bool deserialize(const std::vector<uint8_t>& data, Message& msg);
 
-// ── Payload Helpers ──────────────────────────────────────────
-// Convenience functions to pack/unpack common types into the
-// payload buffer. These make it easy to build payloads for
-// different message types without hand-rolling byte offsets
-// everywhere.
-//
-// Implement these in message.cpp.
 
 // Pack a NodeInfo into a byte vector.
 // Layout: [8 bytes id][2 bytes port][N bytes ip string]

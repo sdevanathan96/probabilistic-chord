@@ -2,7 +2,7 @@
 #include <cassert>
 #include "transport/message.h"
 
-// Simple test harness (replace with GoogleTest later if you want)
+
 #define TEST(name) void name(); \
     struct name##_reg { name##_reg() { tests.push_back({#name, name}); } } name##_inst; \
     void name()
@@ -10,7 +10,7 @@
 struct TestEntry { const char* name; void (*fn)(); };
 static std::vector<TestEntry> tests;
 
-// ── Tests ────────────────────────────────────────────────────
+
 
 TEST(test_pack_unpack_uint64) {
     uint64_t original = 0xDEADBEEFCAFE1234ULL;
@@ -71,7 +71,7 @@ TEST(test_pack_unpack_node_info_empty_ip) {
 }
 
 TEST(test_serialize_deserialize_ping) {
-    // Build a PING message with a NodeInfo payload
+
     NodeInfo sender(42, "10.0.0.1", 9000);
     Message original(MessageType::PING, pack_node_info(sender));
 
@@ -84,7 +84,6 @@ TEST(test_serialize_deserialize_ping) {
     assert(recovered.type == MessageType::PING);
     assert(recovered.payload == original.payload);
 
-    // Verify the payload is still a valid NodeInfo
     size_t offset = 0;
     NodeInfo recovered_sender;
     ok = unpack_node_info(recovered.payload, offset, recovered_sender);
@@ -109,7 +108,7 @@ TEST(test_serialize_deserialize_empty_payload) {
 }
 
 TEST(test_deserialize_truncated) {
-    // A buffer that's too short to hold even the header
+
     std::vector<uint8_t> bad_data = {0x00, 0x01};
 
     Message msg;
@@ -117,8 +116,6 @@ TEST(test_deserialize_truncated) {
     assert(!ok);
     std::cout << "  PASS: reject truncated buffer" << std::endl;
 }
-
-// ── Runner ───────────────────────────────────────────────────
 
 int main() {
     std::cout << "Running message tests..." << std::endl;
