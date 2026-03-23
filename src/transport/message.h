@@ -39,28 +39,19 @@ struct Message {
 //   byte  [4]:    message type
 //   bytes [5..]:  payload
 
-// Serialize a Message into a byte buffer (wire format).
+
 std::vector<uint8_t> serialize(const Message& msg);
 
-// Deserialize a byte buffer (wire format) back into a Message.
-// Returns true on success, false if the buffer is malformed.
 bool deserialize(const std::vector<uint8_t>& data, Message& msg);
 
-
-// Pack a NodeInfo into a byte vector.
 // Layout: [8 bytes id][2 bytes port][N bytes ip string]
 std::vector<uint8_t> pack_node_info(const NodeInfo& node);
 
-// Unpack a NodeInfo from a byte vector starting at offset.
-// Returns true on success, advances offset past the read bytes.
 bool unpack_node_info(const std::vector<uint8_t>& data,
                       size_t& offset, NodeInfo& node);
 
-// Pack a uint64_t into 8 bytes (big-endian).
 std::vector<uint8_t> pack_uint64(uint64_t val);
 
-// Unpack a uint64_t from data at offset (big-endian).
-// Returns true on success, advances offset by 8.
 bool unpack_uint64(const std::vector<uint8_t>& data,
                    size_t& offset, uint64_t& val);
 

@@ -26,26 +26,21 @@ bool unpack_uint64(const std::vector<uint8_t>& data,
     }
 
 std::vector<uint8_t> pack_node_info(const NodeInfo& node) {
-    // We know the exact size: 8 (id) + 2 (port) + 4 (ip length) + ip.size()
     std::vector<uint8_t> info;
     info.reserve(14 + node.ip.size());
 
-    // Pack id (8 bytes)
     std::vector<uint8_t> packed_id = pack_uint64(node.id);
     info.insert(info.end(), packed_id.begin(), packed_id.end());
 
-    // Pack port (2 bytes, big-endian)
     info.push_back((node.port >> 8) & 0xFF);
     info.push_back(node.port & 0xFF);
 
-    // Pack ip string length (4 bytes, big-endian)
     uint32_t len = node.ip.size();
     info.push_back((len >> 24) & 0xFF);
     info.push_back((len >> 16) & 0xFF);
     info.push_back((len >> 8) & 0xFF);
     info.push_back(len & 0xFF);
 
-    // Pack ip string (raw bytes)
     info.insert(info.end(), node.ip.begin(), node.ip.end());
 
     return info;
