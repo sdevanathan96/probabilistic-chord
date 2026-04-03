@@ -131,7 +131,9 @@ void IPCTransport::handle_client_data(int fd) {
         if (it == handlers_.end()) return;
         handler = it->second;
     }
-    handler(from, msg);
+    std::thread([handler, from, msg]() {
+        handler(from, msg);
+    }).detach();
 }
 
 bool IPCTransport::read_exact(int fd, uint8_t* buf, size_t n) {

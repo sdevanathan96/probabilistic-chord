@@ -11,8 +11,8 @@ set(LIB_SOURCES
     src/transport/sim_transport.cpp
     src/transport/sim_network.cpp
     src/transport/ipc_transport.cpp
-    # src/chord/node.cpp
-    # src/chord/ring_utils.cpp
+    src/chord/node.cpp
+    src/chord/ring_utils.cpp
     # src/chord/finger_table.cpp
     # src/filter/cuckoo_filter.cpp
     # src/filter/quotient_filter.cpp
@@ -39,3 +39,7 @@ add_test(NAME test_sim_transport COMMAND test_sim_transport)
 add_executable(test_ipc_transport test/test_ipc_transport.cpp)
 target_link_libraries(test_ipc_transport chord_lib pthread)
 add_test(NAME test_ipc_transport COMMAND test_ipc_transport)
+
+add_executable(test_chord test/test_chord.cpp)
+target_link_libraries(test_chord chord_lib pthread)
+add_test(NAME test_chord COMMAND test_chord)

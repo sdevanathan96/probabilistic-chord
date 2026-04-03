@@ -20,6 +20,7 @@ enum class MessageType : uint8_t {
     LOOKUP_REQ      = 0x40,
     LOOKUP_RESP     = 0x41,
     FILTER_UPDATE   = 0x50,
+    LEAVE_NOTIFY    = 0x60,
 };
 
 
