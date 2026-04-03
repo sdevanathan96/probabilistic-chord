@@ -13,7 +13,7 @@ set(LIB_SOURCES
     src/transport/ipc_transport.cpp
     src/chord/node.cpp
     src/chord/ring_utils.cpp
-    # src/chord/finger_table.cpp
+    src/chord/finger_table.cpp
     # src/filter/cuckoo_filter.cpp
     # src/filter/quotient_filter.cpp
 )
@@ -43,3 +43,7 @@ add_test(NAME test_ipc_transport COMMAND test_ipc_transport)
 add_executable(test_chord test/test_chord.cpp)
 target_link_libraries(test_chord chord_lib pthread)
 add_test(NAME test_chord COMMAND test_chord)
+
+add_executable(test_finger_table test/test_finger_table.cpp)
+target_link_libraries(test_finger_table chord_lib pthread)
+add_test(NAME test_finger_table COMMAND test_finger_table)

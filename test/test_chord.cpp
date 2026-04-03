@@ -32,9 +32,9 @@ void test_in_range() {
     assert(in_range(25, 10, 20) == false);
 
     uint64_t max = UINT64_MAX;
-    assert(in_range(max,     max - 5, 5) == true);
-    assert(in_range(0,       max - 5, 5) == true);
-    assert(in_range(5,       max - 5, 5) == true);
+    assert(in_range(max, max - 5, 5) == true);
+    assert(in_range(0, max - 5, 5) == true);
+    assert(in_range(5, max - 5, 5) == true);
     assert(in_range(max - 5, max - 5, 5) == false);
     assert(in_range(max - 10, max - 5, 5) == false);
 

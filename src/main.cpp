@@ -56,19 +56,22 @@ void run_sim_demo() {
 
     for (int round = 0; round < 10; ++round) {
         node1.stabilize();
+        node1.fix_fingers();
         node2.stabilize();
+        node2.fix_fingers();
         node3.stabilize();
+        node3.fix_fingers();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
     std::cout << "Ring formed:" << std::endl;
-    std::cout << "  Node " << n1.id << " → successor: " << node1.get_successor().id << std::endl;
-    std::cout << "  Node " << n2.id << " → successor: " << node2.get_successor().id << std::endl;
-    std::cout << "  Node " << n3.id << " → successor: " << node3.get_successor().id << std::endl;
+    std::cout << "  Node " << n1.id << " -> successor: " << node1.get_successor().id << std::endl;
+    std::cout << "  Node " << n2.id << " -> successor: " << node2.get_successor().id << std::endl;
+    std::cout << "  Node " << n3.id << " -> successor: " << node3.get_successor().id << std::endl;
 
     uint64_t key = hash_key("hello");
     NodeInfo owner = node1.lookup(key);
-    std::cout << "Lookup(\"hello\") → Node " << owner.id << std::endl;
+    std::cout << "Lookup(\"hello\") -> Node " << owner.id << std::endl;
 
     t1.stop();
     t2.stop();
@@ -108,6 +111,7 @@ void run_ipc_node(NodeId id, const std::string& bootstrap_path) {
     std::cout << "[Node " << id << "] Running (Ctrl+C to stop)..." << std::endl;
     while (running.load()) {
         node.stabilize();
+        node.fix_fingers();
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
     }
 
