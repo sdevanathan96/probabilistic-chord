@@ -262,6 +262,7 @@ void ChordNode::print_finger_table() const {
 }
 
 RoutingMode ChordNode::get_routing_mode() const {
+    std::lock_guard<std::mutex> lock(mutex_);
     return routing_mode_;
 }
 

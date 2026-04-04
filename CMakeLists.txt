@@ -14,6 +14,7 @@ set(LIB_SOURCES
     src/chord/node.cpp
     src/chord/ring_utils.cpp
     src/chord/finger_table.cpp
+    src/bench/metrics.cpp
     # src/filter/cuckoo_filter.cpp
     # src/filter/quotient_filter.cpp
 )
@@ -47,3 +48,7 @@ add_test(NAME test_chord COMMAND test_chord)
 add_executable(test_finger_table test/test_finger_table.cpp)
 target_link_libraries(test_finger_table chord_lib pthread)
 add_test(NAME test_finger_table COMMAND test_finger_table)
+
+add_executable(test_metrics test/test_metrics.cpp)
+target_link_libraries(test_metrics chord_lib pthread)
+add_test(NAME test_metrics COMMAND test_metrics)
