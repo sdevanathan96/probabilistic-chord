@@ -11,11 +11,15 @@ set(LIB_SOURCES
     src/transport/sim_transport.cpp
     src/transport/sim_network.cpp
     src/transport/ipc_transport.cpp
-    src/chord/node.cpp
+    src/chord/chord_node.cpp
+    src/chord/successor_walk_node.cpp
+    src/chord/finger_table_node.cpp
     src/chord/ring_utils.cpp
     src/chord/finger_table.cpp
     src/bench/metrics.cpp
-    # src/filter/cuckoo_filter.cpp
+    src/filter/cuckoo_filter.cpp
+    src/chord/filter_node.cpp
+    src/filter/cuckoo_routing_filter.cpp
     # src/filter/quotient_filter.cpp
 )
 
@@ -25,6 +29,9 @@ target_include_directories(chord_lib PUBLIC ${CMAKE_SOURCE_DIR}/src)
 
 add_executable(chord_node src/main.cpp)
 target_link_libraries(chord_node chord_lib pthread)
+
+add_executable(bench_baseline test/bench_baseline.cpp)
+target_link_libraries(bench_baseline chord_lib pthread)
 
 enable_testing()
 
@@ -52,3 +59,15 @@ add_test(NAME test_finger_table COMMAND test_finger_table)
 add_executable(test_metrics test/test_metrics.cpp)
 target_link_libraries(test_metrics chord_lib pthread)
 add_test(NAME test_metrics COMMAND test_metrics)
+
+add_executable(test_metrics_integration test/test_metrics_integration.cpp)
+target_link_libraries(test_metrics_integration chord_lib pthread)
+add_test(NAME test_metrics_integration COMMAND test_metrics_integration)
+
+add_executable(test_cuckoo_filter test/test_cuckoo_filter.cpp)
+target_link_libraries(test_cuckoo_filter chord_lib pthread)
+add_test(NAME test_cuckoo_filter COMMAND test_cuckoo_filter)
+
+add_executable(test_cuckoo_routing test/test_cuckoo_routing.cpp)
+target_link_libraries(test_cuckoo_routing chord_lib pthread)
+add_test(NAME test_cuckoo_routing COMMAND test_cuckoo_routing)

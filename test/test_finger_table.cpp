@@ -8,7 +8,8 @@
 #include "transport/sim_transport.h"
 #include "chord/ring_utils.h"
 #include "chord/finger_table.h"
-#include "chord/node.h"
+#include "chord/finger_table_node.h"
+#include "chord/chord_node.h"
 
 void test_finger_start() {
     std::cout << "[1] finger_start..." << std::endl;
@@ -70,7 +71,7 @@ void test_finger_table_routing() {
         infos.push_back(NodeInfo(id, "sim", 300 + i));
         transports.push_back(new SimTransport(infos[i]));
         transports[i]->start();
-        nodes.push_back(new ChordNode(transports[i], RoutingMode::FINGER_TABLE));
+        nodes.push_back(new FingerTableNode(transports[i]));
     }
 
     nodes[0]->create();
@@ -79,7 +80,7 @@ void test_finger_table_routing() {
         for (int round = 0; round < 5; ++round) {
             for (int j = 0; j <= i; ++j) {
                 nodes[j]->stabilize();
-                nodes[j]->fix_fingers();
+                nodes[j]->do_maintenance();
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
@@ -88,7 +89,7 @@ void test_finger_table_routing() {
     for (int round = 0; round < 30; ++round) {
         for (int j = 0; j < N; ++j) {
             nodes[j]->stabilize();
-            nodes[j]->fix_fingers();
+            nodes[j]->do_maintenance();
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
@@ -147,7 +148,7 @@ void test_finger_vs_successor_walk() {
         infos.push_back(NodeInfo(id, "sim", 400 + i));
         transports.push_back(new SimTransport(infos[i]));
         transports[i]->start();
-        nodes.push_back(new ChordNode(transports[i], RoutingMode::FINGER_TABLE));
+        nodes.push_back(new FingerTableNode(transports[i]));
     }
 
     nodes[0]->create();
@@ -156,7 +157,7 @@ void test_finger_vs_successor_walk() {
         for (int round = 0; round < 5; ++round) {
             for (int j = 0; j <= i; ++j) {
                 nodes[j]->stabilize();
-                nodes[j]->fix_fingers();
+                nodes[j]->do_maintenance();
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
@@ -165,7 +166,7 @@ void test_finger_vs_successor_walk() {
     for (int round = 0; round < 30; ++round) {
         for (int j = 0; j < N; ++j) {
             nodes[j]->stabilize();
-            nodes[j]->fix_fingers();
+            nodes[j]->do_maintenance();
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }

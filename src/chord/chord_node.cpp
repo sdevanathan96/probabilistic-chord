@@ -3,17 +3,15 @@
 #include <iostream>
 #include "transport/types.h"
 #include "chord/ring_utils.h"
-#include "chord/node.h"
+#include "chord/chord_node.h"
 
 
-ChordNode::ChordNode(Transport* transport, RoutingMode mode) : transport_(transport),
-      self_(transport->local_info()),
-      successor_(self_),
-      predecessor_(self_),
-      routing_mode_(mode),
-      finger_table_(self_.id),
-      response_ready_(false){
-    finger_table_.init_all(self_);
+ChordNode::ChordNode(Transport* transport) : transport_(transport){
+    self_ = transport_->local_info();
+    successor_ = self_;
+    predecessor_ = self_;
+    response_ready_ = false;
+    metrics_ = nullptr;
     transport_->register_handler(MessageType::FIND_SUCCESSOR_REQ,
         std::bind(&ChordNode::handle_find_successor, this, std::placeholders::_1, std::placeholders::_2));
     transport_->register_handler(MessageType::STABILIZE_REQ,
@@ -43,31 +41,62 @@ void ChordNode::create() {
     std::lock_guard<std::mutex> lock(mutex_);
     successor_ = self_;
     predecessor_ = self_;
-    finger_table_.init_all(self_);
+    on_create();
 }
 
 void ChordNode::join(const NodeInfo& bootstrap) {
-    Message req = make_find_successor_req(self_.id);
-    Message response;
-    if (!send_rpc(bootstrap, req, MessageType::FIND_SUCCESSOR_RESP, response)) {
-        throw std::runtime_error("Failed to join: no response from bootstrap");
-    }
-    NodeInfo successor;
-    size_t offset = 0;
-    if (!unpack_node_info(response.payload, offset, successor)) {
-        throw std::runtime_error("Failed to join: invalid response from bootstrap");
-    }
+    double latency_us = 0.0;
     {
-        std::lock_guard<std::mutex> lock(mutex_);
-        successor_ = successor;
-        finger_table_.init_all(successor_);
-        finger_table_.set_finger(0, successor_);
-        predecessor_ = NodeInfo();
+        ScopedTimer timer(latency_us);
+        Message req = make_find_successor_req(self_.id);
+        Message response;
+        if (!send_rpc(bootstrap, req, MessageType::FIND_SUCCESSOR_RESP, response)) {
+            throw std::runtime_error("Failed to join: no response from bootstrap");
+        }
+        NodeInfo successor;
+        size_t offset = 0;
+        if (!unpack_node_info(response.payload, offset, successor)) {
+            throw std::runtime_error("Failed to join: invalid response from bootstrap");
+        }
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            successor_ = successor;
+            on_join(successor);
+            predecessor_ = NodeInfo();
+        }
+    }
+    if (metrics_) {
+        MembershipRecord record;
+        record.node_id = self_.id;
+        record.event_type = "join";
+        record.messages_sent = 1;
+        record.latency_us = latency_us;
+        metrics_->record_membership(record);
     }
 }
 
 NodeInfo ChordNode::lookup(uint64_t key) {
-    return find_successor_for(key);
+    double latency_us = 0.0;
+    NodeInfo result;
+    int hop_count = 0;
+
+    {
+        ScopedTimer timer(latency_us);
+        result = find_successor_for(key, hop_count);
+    }
+
+    if (metrics_ && result.id != 0) {
+        LookupRecord record;
+        record.key = key;
+        record.owner_id = result.id;
+        record.hop_count = hop_count;
+        record.latency_us = latency_us;
+        record.used_fallback = false;
+        record.routing_mode = routing_mode_name();
+        metrics_->record_lookup(record);
+    }
+
+    return result;
 }
 
 void ChordNode::stabilize() {
@@ -78,7 +107,7 @@ void ChordNode::stabilize() {
     }
     Message req(MessageType::STABILIZE_REQ, {});
     Message response;
-    if (!send_rpc(succ, req, MessageType::STABILIZE_REQ, response)) return;
+    if (!send_rpc(succ, req, MessageType::STABILIZE_RESP, response)) return;
     NodeInfo pred;
     size_t offset = 0;
     if (!unpack_node_info(response.payload, offset, pred)) return;
@@ -91,10 +120,14 @@ void ChordNode::stabilize() {
     Message notify_msg;
     notify_msg.type = MessageType::NOTIFY;
     notify_msg.payload = pack_node_info(self_);
+    if (metrics_) {
+        metrics_->count_maintenance_message();
+        metrics_->count_message();
+    }
     transport_->send(successor_, notify_msg);
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        finger_table_.set_finger(0, successor_);
+        on_stabilize();
     }
 }
 
@@ -124,8 +157,35 @@ void ChordNode::handle_find_successor(const NodeInfo& from, const Message& msg) 
     uint64_t key;
     if (!unpack_uint64(msg.payload, offset, key)) return;
 
-    NodeInfo result = find_successor_for(key);
-    Message response(MessageType::FIND_SUCCESSOR_RESP, pack_node_info(result));
+    int hop_count = 0;
+    if (offset < msg.payload.size()) {
+        hop_count = static_cast<int>(msg.payload[offset]);
+    }
+    hop_count++;
+
+    bool we_know;
+    NodeInfo result;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        we_know = in_range(key, self_.id, successor_.id);
+        if (we_know) {
+            result = successor_;
+        }
+    }
+
+    if (!we_know) {
+        NodeInfo next_hop = find_next_hop(key);
+        Message fwd = make_find_successor_req(key, hop_count);
+        Message response;
+        if (!send_rpc(next_hop, fwd, MessageType::FIND_SUCCESSOR_RESP, response)) return;
+
+        transport_->send(from, response);
+        return;
+    }
+
+    std::vector<uint8_t> resp_payload = pack_node_info(result);
+    resp_payload.push_back(static_cast<uint8_t>(hop_count));
+    Message response(MessageType::FIND_SUCCESSOR_RESP, resp_payload);
     transport_->send(from, response);
 }
 
@@ -147,7 +207,13 @@ void ChordNode::handle_notify(const NodeInfo& from, const Message& msg) {
 }
 
 Message ChordNode::make_find_successor_req(uint64_t key) {
-    return Message(MessageType::FIND_SUCCESSOR_REQ, pack_uint64(key));
+    return make_find_successor_req(key, 0);
+}
+
+Message ChordNode::make_find_successor_req(uint64_t key, int hop_count) {
+    std::vector<uint8_t> payload = pack_uint64(key);
+    payload.push_back(static_cast<uint8_t>(hop_count));
+    return Message(MessageType::FIND_SUCCESSOR_REQ, payload);
 }
 
 bool ChordNode::send_rpc(
@@ -160,6 +226,7 @@ bool ChordNode::send_rpc(
         response_ready_ = false;
     }
     if (!transport_->send(dest, request)) return false;
+    if (metrics_) metrics_->count_message();
     std::unique_lock<std::mutex> lock(rpc_mutex_);
     rpc_cv_.wait_for(lock, std::chrono::milliseconds(timeout_ms), [&]{return response_ready_;});
     if (response_ready_) {
@@ -170,17 +237,30 @@ bool ChordNode::send_rpc(
 }
 
 void ChordNode::leave() {
-    NodeInfo pred;
-    NodeInfo succ;
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        pred = predecessor_;
-        succ = successor_;
+    on_leave();
+    double latency_us = 0.0;
+     {
+        ScopedTimer timer(latency_us);
+        NodeInfo pred;
+        NodeInfo succ;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            pred = predecessor_;
+            succ = successor_;
+        }
+        Message to_succ(MessageType::LEAVE_NOTIFY, pack_node_info(pred));
+        Message to_pred(MessageType::LEAVE_NOTIFY, pack_node_info(succ));
+        transport_->send(successor_, to_succ);
+        transport_->send(predecessor_, to_pred);
     }
-    Message to_succ(MessageType::LEAVE_NOTIFY, pack_node_info(pred));
-    Message to_pred(MessageType::LEAVE_NOTIFY, pack_node_info(succ));
-    transport_->send(successor_, to_succ);
-    transport_->send(predecessor_, to_pred);
+    if (metrics_) {
+        MembershipRecord record;
+        record.node_id = self_.id;
+        record.event_type = "leave";
+        record.messages_sent = 2;
+        record.latency_us = latency_us;
+        metrics_->record_membership(record);
+    }
 }
 
 void ChordNode::handle_leave_notify(const NodeInfo& from, const Message& msg) {
@@ -198,72 +278,69 @@ void ChordNode::handle_leave_notify(const NodeInfo& from, const Message& msg) {
 }
 
 NodeInfo ChordNode::find_successor_for(uint64_t key) {
-    NodeInfo succ;
+    int hop_count = 0;
+    return find_successor_for(key, hop_count);
+}
+
+NodeInfo ChordNode::find_successor_for(uint64_t key, int& hop_count) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (in_range(key, self_.id, successor_.id)) {
+            hop_count = 1;
             return successor_;
         }
         if (successor_ == self_) {
+            hop_count = 0;
             return self_;
         }
-
-        if (routing_mode_ == RoutingMode::FINGER_TABLE) {
-            succ = finger_table_.closest_preceding_finger(key);
-            if (succ.id == self_.id) {
-                succ = successor_;
-            }
-        } else {
-            succ = successor_;
-        }
     }
 
-    Message req = make_find_successor_req(key);
+    NodeInfo next_hop = find_next_hop(key);
+
+    Message req = make_find_successor_req(key, 1);
     Message response;
-    if (!send_rpc(succ, req, MessageType::FIND_SUCCESSOR_RESP, response)) {
+    if (!send_rpc(next_hop, req, MessageType::FIND_SUCCESSOR_RESP, response)) {
         return NodeInfo();
     }
+
     NodeInfo result;
     size_t offset = 0;
     if (!unpack_node_info(response.payload, offset, result)) {
         return NodeInfo();
     }
+
+    if (offset < response.payload.size()) {
+        hop_count = static_cast<int>(response.payload[offset]);
+    }
+
     return result;
 }
 
-void ChordNode::fix_fingers() {
-    int i;
-    uint64_t target;
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        i = finger_table_.next_fix_index();
-        target = finger_table_.finger_start(i);
-    }
-
-    NodeInfo result = find_successor_for(target);
-
-    if (result.id != 0) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        finger_table_.set_finger(i, result);
-    }
+NodeInfo ChordNode::find_next_hop(uint64_t key) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return successor_;
 }
 
-void ChordNode::print_finger_table() const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    std::cout << "Finger table for Node " << self_.id << ":" << std::endl;
-    for (int i = 0; i < FingerTable::M; ++i) {
-        NodeInfo f = finger_table_.get_finger(i);
-        if (f.id != 0) {
-            std::cout << "  [" << i << "] start="
-                      << finger_table_.finger_start(i)
-                      << " -> Node " << f.id << std::endl;
-        }
+NodeInfo ChordNode::find_successor_for(uint64_t key, bool is_maintenance) {
+    NodeInfo result = find_successor_for(key);
+    if (is_maintenance && metrics_) {
+        metrics_->count_maintenance_message();
     }
+    return result;
 }
 
-RoutingMode ChordNode::get_routing_mode() const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return routing_mode_;
+void ChordNode::on_create() {}
+void ChordNode::on_join(const NodeInfo& successor) {}
+void ChordNode::on_stabilize() {}
+void ChordNode::on_leave() {}
+void ChordNode::do_maintenance() {}
+
+std::string ChordNode::routing_mode_name() const {
+    return "successor_walk";
+}
+
+void ChordNode::set_metrics(Metrics* metrics) {
+    metrics_ = metrics;
 }
 
 ChordNode::~ChordNode() {}

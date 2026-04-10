@@ -6,7 +6,8 @@
 #include <atomic>
 #include "transport/sim_transport.h"
 #include "transport/ipc_transport.h"
-#include "chord/node.h"
+#include "chord/finger_table_node.h"
+#include "chord/chord_node.h"
 #include "chord/ring_utils.h"
 
 static std::atomic<bool> running(true);
@@ -41,9 +42,9 @@ void run_sim_demo() {
     t2.start();
     t3.start();
 
-    ChordNode node1(&t1);
-    ChordNode node2(&t2);
-    ChordNode node3(&t3);
+    FingerTableNode node1(&t1);
+    FingerTableNode node2(&t2);
+    FingerTableNode node3(&t3);
 
     node1.create();
     std::cout << "[Node " << n1.id << "] Created ring" << std::endl;
@@ -56,11 +57,11 @@ void run_sim_demo() {
 
     for (int round = 0; round < 10; ++round) {
         node1.stabilize();
-        node1.fix_fingers();
+        node1.do_maintenance();
         node2.stabilize();
-        node2.fix_fingers();
+        node2.do_maintenance();
         node3.stabilize();
-        node3.fix_fingers();
+        node3.do_maintenance();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
@@ -89,7 +90,7 @@ void run_ipc_node(NodeId id, const std::string& bootstrap_path) {
     IPCTransport transport(self, socket_path);
     transport.start();
 
-    ChordNode node(&transport);
+    FingerTableNode node(&transport);
 
     if (bootstrap_path.empty()) {
         node.create();
@@ -111,7 +112,7 @@ void run_ipc_node(NodeId id, const std::string& bootstrap_path) {
     std::cout << "[Node " << id << "] Running (Ctrl+C to stop)..." << std::endl;
     while (running.load()) {
         node.stabilize();
-        node.fix_fingers();
+        node.do_maintenance();
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
     }
 

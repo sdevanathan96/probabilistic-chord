@@ -6,7 +6,7 @@
 #include <chrono>
 #include "transport/sim_transport.h"
 #include "chord/ring_utils.h"
-#include "chord/node.h"
+#include "chord/successor_walk_node.h"
 
 void test_fnv1a_hash() {
     std::cout << "[1] FNV-1a hash..." << std::endl;
@@ -129,7 +129,7 @@ void test_multi_node_ring() {
         infos.push_back(NodeInfo(id, "sim", 100 + i));
         transports.push_back(new SimTransport(infos[i]));
         transports[i]->start();
-        nodes.push_back(new ChordNode(transports[i]));
+        nodes.push_back(new SuccessorWalkNode(transports[i]));
     }
 
     nodes[0]->create();
@@ -202,7 +202,7 @@ void test_node_leave() {
         infos.push_back(NodeInfo(id, "sim", 200 + i));
         transports.push_back(new SimTransport(infos[i]));
         transports[i]->start();
-        nodes.push_back(new ChordNode(transports[i]));
+        nodes.push_back(new SuccessorWalkNode(transports[i]));
     }
 
     nodes[0]->create();
