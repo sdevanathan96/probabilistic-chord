@@ -24,6 +24,12 @@ struct MembershipRecord {
     double latency_us;
 };
 
+struct TimedLookupRecord {
+    double timestamp_ms;
+    double latency_us;
+    int hop_count;
+    std::string routing_mode;
+};
 
 class Metrics {
 public:

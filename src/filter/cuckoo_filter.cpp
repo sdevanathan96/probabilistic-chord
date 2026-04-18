@@ -1,7 +1,9 @@
 #include <cstdint>
 #include <vector>
 #include <cstddef>
-#include "cuckoo_filter.h"
+#include <cstdlib>
+
+#include "filter/cuckoo_filter.h"
 
 CuckooFilter::CuckooFilter(size_t num_buckets, int fingerprint_bits,
                            int bucket_size, int max_kicks)

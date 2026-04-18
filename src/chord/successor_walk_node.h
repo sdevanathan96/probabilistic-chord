@@ -7,9 +7,8 @@
 class SuccessorWalkNode : public ChordNode {
 public:
     explicit SuccessorWalkNode(Transport* transport);
-
+    virtual NodeInfo find_next_hop(uint64_t key);
 protected:
-    NodeInfo find_next_hop(uint64_t key);
     std::string routing_mode_name() const;
 };
 

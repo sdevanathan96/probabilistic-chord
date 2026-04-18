@@ -37,12 +37,6 @@ void IPCTransport::stop(){
     if(listener_thread_.joinable()) {
         listener_thread_.join();
     }
-    for (int fd : client_fds_) {
-        close(fd);
-    }
-    for (const auto& pair : conn_pool_) {
-        close(pair.second);
-    }
     unlink(socket_path_.c_str());
 }
 
@@ -62,7 +56,7 @@ int IPCTransport::create_listener() {
         return -1;
     }
 
-    if (listen(fd, 5) < 0) {
+    if (listen(fd, 1024) < 0) {
         close(fd);
         return -1;
     }
@@ -72,25 +66,11 @@ int IPCTransport::create_listener() {
 
 void IPCTransport::listen_loop() {
     while (running_) {
-        std::vector<struct pollfd> poll_fds;
-        poll_fds.push_back({listen_fd_, POLLIN, 0});
-        {
-            std::lock_guard<std::mutex> lock(client_mutex_);
-            for (int fd : client_fds_) {
-                poll_fds.push_back({fd, POLLIN, 0});
-            }
-        }
-        int ready = poll(poll_fds.data(), poll_fds.size(), 100);
+        struct pollfd pfd = {listen_fd_, POLLIN, 0};
+        int ready = poll(&pfd, 1, 100);
         if (ready <= 0) continue;
-
-        if (poll_fds[0].revents & POLLIN) {
+        if (pfd.revents & POLLIN) {
             handle_new_connection();
-        }
-
-        for (size_t i = 1; i < poll_fds.size(); ++i) {
-            if (poll_fds[i].revents & POLLIN) {
-                handle_client_data(poll_fds[i].fd);
-            }
         }
     }
 }
@@ -99,21 +79,13 @@ void IPCTransport::handle_new_connection() {
     int client_fd = accept(listen_fd_, nullptr, nullptr);
     if (client_fd < 0) return;
 
-    std::lock_guard<std::mutex> lock(client_mutex_);
-    client_fds_.push_back(client_fd);
-}
-
-void IPCTransport::handle_client_data(int fd) {
     Message msg;
-    if (!read_message(fd, msg)) {
-        close(fd);
-        std::lock_guard<std::mutex> lock(client_mutex_);
-        client_fds_.erase(
-            std::remove(client_fds_.begin(), client_fds_.end(), fd),
-            client_fds_.end()
-        );
+    if (!read_message(client_fd, msg)) {
+        close(client_fd);
         return;
     }
+
+    close(client_fd);
 
     NodeInfo from;
     size_t offset = 0;
@@ -131,6 +103,7 @@ void IPCTransport::handle_client_data(int fd) {
         if (it == handlers_.end()) return;
         handler = it->second;
     }
+
     std::thread([handler, from, msg]() {
         handler(from, msg);
     }).detach();
@@ -190,35 +163,22 @@ const NodeInfo& IPCTransport::local_info() const {
     return local_;
 }
 
-int IPCTransport::get_or_connect(const std::string& dest_socket_path){
-    {
-        std::lock_guard<std::mutex> lock(conn_mutex_);
-        auto it = conn_pool_.find(dest_socket_path);
-        if (it != conn_pool_.end()) {
-            return it->second;
-        }
-    }
+bool IPCTransport::send(const NodeInfo& dest, const Message& msg) {
+    std::string dest_path = path_for_node(dest);
+
     int fd = socket(AF_UNIX, SOCK_STREAM, 0);
-    if (fd < 0) return -1;
+    if (fd < 0) return false;
+
     struct sockaddr_un addr;
     memset(&addr, 0, sizeof(addr));
     addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path, dest_socket_path.c_str(), sizeof(addr.sun_path) - 1);
+    strncpy(addr.sun_path, dest_path.c_str(), sizeof(addr.sun_path) - 1);
+
     if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
         close(fd);
-        return -1;
+        return false;
     }
-    {
-        std::lock_guard<std::mutex> lock(conn_mutex_);
-        conn_pool_[dest_socket_path] = fd;
-    }
-    return fd;
-}
 
-bool IPCTransport::send(const NodeInfo& dest, const Message& msg) {
-    std::string dest_path = path_for_node(dest);
-    int fd = get_or_connect(dest_path);
-    if (fd < 0) return false;
     std::vector<uint8_t> sender_bytes = pack_node_info(local_);
     std::vector<uint8_t> new_payload;
     new_payload.reserve(sender_bytes.size() + msg.payload.size());
@@ -226,7 +186,9 @@ bool IPCTransport::send(const NodeInfo& dest, const Message& msg) {
     new_payload.insert(new_payload.end(), msg.payload.begin(), msg.payload.end());
 
     Message wire_msg(msg.type, new_payload);
-    return write_message(fd, wire_msg);
+    bool ok = write_message(fd, wire_msg);
+    close(fd);
+    return ok;
 }
 
 const std::string& IPCTransport::socket_path() const {

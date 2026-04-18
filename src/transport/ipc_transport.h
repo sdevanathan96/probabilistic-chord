@@ -24,13 +24,10 @@ public:
 
 private:
     void handle_new_connection();
-    void handle_client_data(int fd);
     void listen_loop();
     int create_listener();
 
     bool read_message(int fd, Message& msg);
-
-    int get_or_connect(const std::string& dest_socket_path);
 
     bool write_message(int fd, const Message& msg);
 
@@ -43,15 +40,9 @@ private:
     std::map<MessageType, MessageHandler> handlers_;
     std::mutex handler_mutex_;
 
-    std::map<std::string, int> conn_pool_;
-    std::mutex conn_mutex_;
-
     int listen_fd_;
     std::thread listener_thread_;
     std::atomic<bool> running_;
-
-    std::vector<int> client_fds_;
-    std::mutex client_mutex_;
 };
 
 #endif // CHORD_IPC_TRANSPORT_H

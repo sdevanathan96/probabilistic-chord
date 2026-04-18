@@ -4,9 +4,10 @@
 #include <cstdint>
 #include <vector>
 #include <cstddef>
+#include "filter/filter.h"
 
 
-class CuckooFilter {
+class CuckooFilter: public Filter {
 public:
     static const int DEFAULT_BUCKET_SIZE = 4;
     static const int DEFAULT_MAX_KICKS = 500;
@@ -15,19 +16,19 @@ public:
                  int bucket_size = DEFAULT_BUCKET_SIZE,
                  int max_kicks = DEFAULT_MAX_KICKS);
 
-    bool insert(uint64_t element);
+    bool insert(uint64_t element) override;
 
-    bool lookup(uint64_t element) const;
+    bool lookup(uint64_t element) const override;
 
-    bool remove(uint64_t element);
+    bool remove(uint64_t element) override;
 
-    size_t count() const;
+    size_t count() const override;
 
-    size_t capacity() const;
+    size_t capacity() const override;
 
-    double load_factor() const;
+    double load_factor() const override;
 
-    size_t memory_usage() const;
+    size_t memory_usage() const override;
 
 private:
     uint32_t compute_fingerprint(uint64_t element) const;

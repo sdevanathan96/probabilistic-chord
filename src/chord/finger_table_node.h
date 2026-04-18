@@ -10,9 +10,9 @@ public:
     explicit FingerTableNode(Transport* transport);
     void do_maintenance();
     void print_finger_table() const;
+    virtual NodeInfo find_next_hop(uint64_t key);
 
 protected:
-    NodeInfo find_next_hop(uint64_t key);
     void on_create();
     void on_join(const NodeInfo& successor);
     void on_stabilize();

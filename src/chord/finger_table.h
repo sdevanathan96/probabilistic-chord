@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <cstdint>
+#include <stdexcept>
 #include "transport/types.h"
 
 

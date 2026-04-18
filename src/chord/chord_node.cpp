@@ -1,6 +1,7 @@
 #include <cstdint>
 #include <string>
 #include <iostream>
+#include <set>
 #include "transport/types.h"
 #include "chord/ring_utils.h"
 #include "chord/chord_node.h"
@@ -48,22 +49,42 @@ void ChordNode::join(const NodeInfo& bootstrap) {
     double latency_us = 0.0;
     {
         ScopedTimer timer(latency_us);
-        Message req = make_find_successor_req(self_.id);
-        Message response;
-        if (!send_rpc(bootstrap, req, MessageType::FIND_SUCCESSOR_RESP, response)) {
-            throw std::runtime_error("Failed to join: no response from bootstrap");
-        }
+        NodeInfo current = bootstrap;
         NodeInfo successor;
-        size_t offset = 0;
-        if (!unpack_node_info(response.payload, offset, successor)) {
-            throw std::runtime_error("Failed to join: invalid response from bootstrap");
+        std::set<NodeId> visited;
+
+        while (true) {
+            if (visited.count(current.id)) {
+                throw std::runtime_error("Failed to join: routing loop");
+            }
+            visited.insert(current.id);
+
+            Message req = make_find_successor_req(self_.id, 0);
+            Message response;
+            if (!send_rpc(current, req, MessageType::FIND_SUCCESSOR_RESP, response)) {
+                throw std::runtime_error("Failed to join: no response");
+            }
+
+            size_t offset = 0;
+            if (!unpack_node_info(response.payload, offset, successor)) {
+                throw std::runtime_error("Failed to join: invalid response");
+            }
+
+            bool is_final = false;
+            if (offset < response.payload.size()) {
+                is_final = (response.payload[offset] == 1);
+            }
+
+            if (is_final) break;
+            current = successor;
         }
+
         {
             std::lock_guard<std::mutex> lock(mutex_);
             successor_ = successor;
-            on_join(successor);
             predecessor_ = NodeInfo();
         }
+        on_join(successor_);
     }
     if (metrics_) {
         MembershipRecord record;
@@ -157,34 +178,25 @@ void ChordNode::handle_find_successor(const NodeInfo& from, const Message& msg) 
     uint64_t key;
     if (!unpack_uint64(msg.payload, offset, key)) return;
 
-    int hop_count = 0;
-    if (offset < msg.payload.size()) {
-        hop_count = static_cast<int>(msg.payload[offset]);
-    }
-    hop_count++;
-
-    bool we_know;
     NodeInfo result;
+    bool is_final = false;
+
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        we_know = in_range(key, self_.id, successor_.id);
-        if (we_know) {
+        if (in_range(key, self_.id, successor_.id)) {
             result = successor_;
+            is_final = true;
+        } else {
+            result = find_next_hop(key);
+            if (result.id == self_.id || result.id == 0) {
+                result = successor_;
+            }
+            is_final = false;
         }
     }
 
-    if (!we_know) {
-        NodeInfo next_hop = find_next_hop(key);
-        Message fwd = make_find_successor_req(key, hop_count);
-        Message response;
-        if (!send_rpc(next_hop, fwd, MessageType::FIND_SUCCESSOR_RESP, response)) return;
-
-        transport_->send(from, response);
-        return;
-    }
-
     std::vector<uint8_t> resp_payload = pack_node_info(result);
-    resp_payload.push_back(static_cast<uint8_t>(hop_count));
+    resp_payload.push_back(is_final ? 1 : 0);
     Message response(MessageType::FIND_SUCCESSOR_RESP, resp_payload);
     transport_->send(from, response);
 }
@@ -212,7 +224,10 @@ Message ChordNode::make_find_successor_req(uint64_t key) {
 
 Message ChordNode::make_find_successor_req(uint64_t key, int hop_count) {
     std::vector<uint8_t> payload = pack_uint64(key);
-    payload.push_back(static_cast<uint8_t>(hop_count));
+    payload.push_back(static_cast<uint8_t>((hop_count >> 8) & 0xFF));
+    payload.push_back(static_cast<uint8_t>(hop_count & 0xFF));
+    std::vector<uint8_t> origin = pack_uint64(self_.id);
+    payload.insert(payload.end(), origin.begin(), origin.end());
     return Message(MessageType::FIND_SUCCESSOR_REQ, payload);
 }
 
@@ -295,25 +310,48 @@ NodeInfo ChordNode::find_successor_for(uint64_t key, int& hop_count) {
         }
     }
 
+    NodeInfo current;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        current = successor_;
+    }
+
     NodeInfo next_hop = find_next_hop(key);
-
-    Message req = make_find_successor_req(key, 1);
-    Message response;
-    if (!send_rpc(next_hop, req, MessageType::FIND_SUCCESSOR_RESP, response)) {
-        return NodeInfo();
+    if (next_hop.id != 0) {
+        current = next_hop;
     }
 
-    NodeInfo result;
-    size_t offset = 0;
-    if (!unpack_node_info(response.payload, offset, result)) {
-        return NodeInfo();
-    }
+    std::set<NodeId> visited;
 
-    if (offset < response.payload.size()) {
-        hop_count = static_cast<int>(response.payload[offset]);
-    }
+    for (hop_count = 1; ; ++hop_count) {
+        if (visited.count(current.id)) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            return successor_;
+        }
+        visited.insert(current.id);
+        Message req = make_find_successor_req(key, hop_count);
+        Message response;
+        if (!send_rpc(current, req, MessageType::FIND_SUCCESSOR_RESP, response)) {
+            return NodeInfo();
+        }
 
-    return result;
+        NodeInfo result;
+        size_t offset = 0;
+        if (!unpack_node_info(response.payload, offset, result)) {
+            return NodeInfo();
+        }
+        bool is_final = false;
+        if (offset < response.payload.size()) {
+            is_final = (response.payload[offset] == 1);
+        }
+
+        if (is_final) {
+            return result;
+        }
+        current = result;
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    return successor_;
 }
 
 NodeInfo ChordNode::find_next_hop(uint64_t key) {

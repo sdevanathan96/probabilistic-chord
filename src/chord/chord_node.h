@@ -22,6 +22,7 @@ public:
     void stabilize();
     void notify(const NodeInfo& candidate);
     virtual void do_maintenance();
+    virtual NodeInfo find_next_hop(uint64_t key);
 
     void set_metrics(Metrics* metrics);
 
@@ -30,7 +31,6 @@ public:
     NodeInfo get_predecessor() const;
 
 protected:
-    virtual NodeInfo find_next_hop(uint64_t key);
 
     virtual void on_create();
 
@@ -51,7 +51,7 @@ protected:
 
     bool send_rpc(const NodeInfo& dest, const Message& request,
                   MessageType response_type, Message& response,
-                  int timeout_ms = 3000);
+                  int timeout_ms = 10000);
 
     Transport* transport_;
     NodeInfo self_;

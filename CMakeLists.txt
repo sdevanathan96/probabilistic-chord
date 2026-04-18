@@ -18,9 +18,11 @@ set(LIB_SOURCES
     src/chord/finger_table.cpp
     src/bench/metrics.cpp
     src/filter/cuckoo_filter.cpp
+    src/filter/routing_filter.cpp
     src/chord/filter_node.cpp
     src/filter/cuckoo_routing_filter.cpp
-    # src/filter/quotient_filter.cpp
+    src/filter/quotient_filter.cpp
+    src/filter/quotient_routing_filter.cpp
 )
 
 add_library(chord_lib ${LIB_SOURCES})
@@ -32,6 +34,12 @@ target_link_libraries(chord_node chord_lib pthread)
 
 add_executable(bench_baseline test/bench_baseline.cpp)
 target_link_libraries(bench_baseline chord_lib pthread)
+
+add_executable(run_experiments test/run_experiments.cpp)
+target_link_libraries(run_experiments chord_lib pthread)
+
+add_executable(bench_decision_time test/bench_decision_time.cpp)
+target_link_libraries(bench_decision_time chord_lib pthread)
 
 enable_testing()
 
@@ -71,3 +79,11 @@ add_test(NAME test_cuckoo_filter COMMAND test_cuckoo_filter)
 add_executable(test_cuckoo_routing test/test_cuckoo_routing.cpp)
 target_link_libraries(test_cuckoo_routing chord_lib pthread)
 add_test(NAME test_cuckoo_routing COMMAND test_cuckoo_routing)
+
+add_executable(test_quotient_filter test/test_quotient_filter.cpp)
+target_link_libraries(test_quotient_filter chord_lib pthread)
+add_test(NAME test_quotient_filter COMMAND test_quotient_filter)
+
+add_executable(test_quotient_routing test/test_quotient_routing.cpp)
+target_link_libraries(test_quotient_routing chord_lib pthread)
+add_test(NAME test_quotient_routing COMMAND test_quotient_routing)

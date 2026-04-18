@@ -3,7 +3,8 @@
 #include "chord/filter_node.h"
 
 FilterNode::FilterNode(Transport* transport, RoutingFilter* filter)
-    : ChordNode(transport), routing_filter_(filter) {
+    : ChordNode(transport), routing_filter_(filter), next_maintenance_index_(0),
+    maintenance_cycles_(0) {
     transport_->register_handler(MessageType::FILTER_UPDATE,
         std::bind(&FilterNode::handle_filter_update, this,
         std::placeholders::_1, std::placeholders::_2));
@@ -46,5 +47,25 @@ void FilterNode::handle_filter_update(const NodeInfo& from, const Message& msg) 
         routing_filter_->insert(key_range_id, node);
     } else {
         routing_filter_->remove(key_range_id);
+    }
+}
+
+void FilterNode::do_maintenance() {
+    uint64_t target;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        target = self_.id + (1ULL << next_maintenance_index_);
+        next_maintenance_index_ = (next_maintenance_index_ + 1) % 64;
+    }
+
+    NodeInfo result = find_successor_for(target, true);
+
+    if (result.id != 0) {
+        routing_filter_->insert(result.id, result);
+    }
+
+    maintenance_cycles_++;
+    if (maintenance_cycles_ % 64 == 0) {
+        routing_filter_->rebuild();
     }
 }

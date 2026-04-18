@@ -7,18 +7,17 @@
 
 class CuckooRoutingFilter : public RoutingFilter {
 public:
-    CuckooRoutingFilter(size_t num_buckets, int fingerprint_bits);
+    CuckooRoutingFilter(size_t num_buckets, int fingerprint_bits,
+                        int num_bins_bits = 10);
+    std::string filter_name() const override;
 
-    bool insert(uint64_t key_range_id, const NodeInfo& node);
-    bool remove(uint64_t key_range_id);
-    bool lookup(uint64_t key, NodeInfo& result);
-    size_t count() const;
-    size_t memory_usage() const;
-    std::string filter_name() const;
+protected:
+    void filter_rebuild(const std::unordered_map<uint64_t, NodeInfo>& bin_table) override;
 
 private:
-    CuckooFilter filter_;
-    std::unordered_map<uint64_t, NodeInfo> side_table_;
+    CuckooFilter c_filter_;
+    size_t num_buckets_;
+    int fingerprint_bits_;
 };
 
 #endif // CHORD_CUCKOO_ROUTING_FILTER_H

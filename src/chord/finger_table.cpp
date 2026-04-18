@@ -1,5 +1,6 @@
 #include <vector>
 #include <cstdint>
+#include <stdexcept>
 #include "chord/finger_table.h"
 #include "chord/ring_utils.h"
 
