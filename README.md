@@ -2,7 +2,7 @@
 
 Replacing Chord DHT finger tables with Cuckoo and Quotient filter-based routing, using a bin-based spatial indexing scheme. Built in C++11. Benchmarked across ring sizes from 8 to 1024 nodes using both in-process simulation and Unix domain socket IPC.
 
-> **Headline result.** Filter-based routing achieves the same O(log n) hop count class as the standard finger table while consuming roughly **50% fewer maintenance messages** during stable network periods. The per-hop routing decision is slower than a finger table scan but the difference is under 5% of total per-hop cost in any realistic networked deployment.
+> **Headline result.** Filter based routing cut stable period maintenance messages by about 50%. But because peers are not propagated between nodes, hop counts grew roughly linearly with ring size (about 12 hops at 256 nodes and 47 at 1024, versus about 4 for finger tables), so net message savings were only about 9% in this workload and shrink as lookup rate rises. The result suggests most of Chord’s maintenance cost is buying routing efficiency, which a filter cannot recover without paying for propagation again.
 
 ---
 
